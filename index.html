@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Edutech</title>
+  <link rel="icon" href="images/logo.png" sizes="16x16 32x32" type="image/png">
+  <meta name="description" content="EduTech est une entreprise qui s'interesse a tout ce qui 
+  se lie a la technologie : formation, commande, configuration, installation etc...
+  E-mail: saintanio@gmail.com ">
+  <meta name="author" content="Saintanio ESTIMABLE">
+
+  <link rel="stylesheet" href="css/main.css">
+
+</head>
+
+<body>
+  <header>
+    <nav>
+      <img src="images/icon.png" width="32" alt="">
+      <span class="titre">Edutech Services</span>
+    </nav>
+    <search>
+      <span class="icon">&#128269;</span>
+      <input type="search" id="globalSearch" placeholder="Recherche par nom" oninput="filtrerCards(produits)">
+      <a href="#" id="setting" title="Configuration">⚙</a>
+      <button id="auth" title="Logout">&#128273;</button>
+    </search>
+  </header>
+  <section class="container">
+    <aside class="tab">
+      <a href="#" class="tablinks" id="profil"><span>🏛️</span> Profil</a>
+      <a href="#" class="tablinks" id="produit"><span>&#128215;</span> Produit</a>
+      <a href="#" class="tablinks" id="stock"><span>&#128218;</span> Stock</a>
+      <a href="#" class="tablinks" id="client"><span>&#128110;</span>Client</a>
+
+      <a href="#" id="new" class="new" title="Nouveau"><span>+</span></a>
+    </aside>
+    <main style="overflow-x:auto;">
+      <div class="radio-group">
+
+        <label class="report" data-id="stats">
+          <input type="radio" name="report" checked>
+          <div class="ligne">
+            <div class="icon">📊</div>
+            <span class="label">Statistiques</span>
+          </div>
+          <div class="highlight"></div>
+        </label>
+
+        <label class="report" data-id="profits">
+          <input type="radio" name="report">
+          <div class="ligne">
+            <div class="icon">💰</div>
+            <span class="label">Profits</span>
+          </div>
+          <div class="highlight"></div>
+        </label>
+
+        <label class="report" data-id="commandes">
+          <input type="radio" name="report">
+          <div class="ligne">
+            <div class="icon">🛍️</div>
+            <span class="label">Commandes</span>
+          </div>
+          <div class="highlight"></div>
+        </label>
+
+        <label class="report" data-id="livraison">
+          <input type="radio" name="report">
+          <div class="ligne">
+            <div class="icon">🚚</div>
+            <span class="label">Livraison</span>
+          </div>
+          <div class="highlight"></div>
+        </label>
+        <select id="select-annee"></select>
+
+             <a href="synchonize.html" target="_blank" title="Synchroniser">⇅</a>
+        
+
+      </div>
+      <hr>
+      <main id="content" style="overflow-x:auto;"></main>
+    </main>
+  </section>
+
+  <div id="message-box"></div>
+  <footer><span id="copyright">&copy; 2025 Saintanio. Tous
+      droits réservés</span>
+  </footer>
+
+  <!-- ========================= MODAL RÉGLAGES ========================= -->
+  <div id="modal-setting" class="modal">
+    <div class="modal-content">
+      <span id="close-modal" class="close">&times;</span>
+      <h2>Suivi paiement natcash</h2>
+
+      <label for="cfg-api-key">Google Drive API Key</label>
+      <input id="cfg-api-key" class="config-input" type="text" placeholder="AIza...">
+
+      <label for="cfg-file-id">Drive File ID</label>
+      <input id="cfg-file-id" class="config-input" type="text" placeholder="ex: 13ia6qPv...">
+
+      <button id="save-config" class="btn">Enregistrer</button>
+    </div>
+  </div>
+
+  <div id="message-box"></div>
+  <script type="module" src="main.js"></script>
+
+</body>
+
+</html>

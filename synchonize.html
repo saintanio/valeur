@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>Sync IndexedDB ↔ Firestore</title>
+
+    <style>
+        *{
+            box-sizing: border-box;
+        }
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #f4f4f4;
+        }
+
+        /* Ligne du select + bouton */
+        .top-bar {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        select {
+            flex: 1;
+            padding: 14px;
+            font-size: 20px;
+            border-radius: 8px;
+            border: 1px solid #ccc;
+        }
+
+        .btn-sync {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: #007bff;
+            color: white;
+            padding: 15px 25px;
+            border-radius: 8px;
+            font-size: 22px;
+            border: none;
+            cursor: pointer;
+        }
+
+        .btn-sync svg {
+            width: 24px;
+            height: 24px;
+        }
+
+
+        #progressBarContainer {
+            width: 100%;
+            background: #ddd;
+            border-radius: 8px;
+            margin-top: 15px
+        }
+
+        #progressBar {
+            height: 12px;
+            width: 0%;
+            background: #28a745;
+            border-radius: 8px
+        }
+
+        .status {
+            margin: 15px 0;
+            font-size: 20px;
+            font-weight: bold;
+        }
+
+        /* Cards */
+        .cards {
+            margin-top: 20px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 25px;
+        }
+
+        .card {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 0 8px rgba(0, 0, 0, 0.05);
+        }
+
+        .card h2 {
+            margin-top: 0;
+            margin-bottom: 20px;
+        }
+
+        input {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0 20px;
+            border-radius: 6px;
+            border: 1px solid #ccc;
+        }
+
+        .btn-row {
+            display: flex;
+            gap: 15px;
+        }
+
+        .btn-save {
+            background: #007bff;
+            color: white;
+            padding: 12px 20px;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            flex: 1;
+        }
+
+        .btn-reset {
+            background: #005ccb;
+            color: white;
+            padding: 12px 20px;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            flex: 1;
+        }
+
+        ul.log {
+            margin: 0;
+            padding-left: 20px;
+            font-size: 18px;
+            max-height: 260px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="top-bar">
+        <select id="dbSelect"></select>
+
+        <button id="btnSync" class="btn-sync">
+            🔄 Synchroniser maintenant
+        </button>
+    </div>
+
+    <div id="progressBarContainer" class="progress">
+        <div id="progressBar"></div>
+    </div>
+
+    <div id="status" class="status">En attente...</div>
+
+    <div class="cards">
+
+        <!-- ----------- CARD GAUCHE: Configuration Firestore ----------- -->
+        <div class="card" id="cfgCard">
+            <h2>Configuration Firestore</h2>
+
+            <label>API Key</label>
+            <input type="text" id="cfg_apiKey">
+
+            <label>Project ID</label>
+            <input type="text" id="cfg_projectId">
+
+            <label>App ID</label>
+            <input type="text" id="cfg_appId">
+
+            <div class="btn-row">
+                <button id="btnSaveConfig" class="btn-save">💾 Enregistrer</button>
+                <button id="btnResetConfig" class="btn-reset">🔄 Réinitialiser</button>
+            </div>
+            <div id="cfgStatus" style="margin-top:10px;"></div>
+        </div>
+
+        <!-- ----------- CARD DROITE: Historique ----------- -->
+        <div class="card">
+            <h2>Historique des opérations</h2>
+            <ul class="log" id="history"></ul>
+        </div>
+
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+
+    <script>
+        // ---------------------------
+        // FirestoreIndexedDBSync (compact, sans realtime)
+        // ---------------------------
+        class FirestoreIndexedDBSync {
+            constructor({ dbName, stores, firestore, onProgress }) {
+                this.dbName = dbName;
+                this.stores = stores;
+                this.firestore = firestore;
+                this.onProgress = onProgress || null;
+            }
+
+            init() {
+                return new Promise((resolve, reject) => {
+                    const req = indexedDB.open(this.dbName);
+                    req.onupgradeneeded = e => {
+                        const db = e.target.result;
+                        for (const s of Object.keys(this.stores))
+                            if (!db.objectStoreNames.contains(s))
+                                db.createObjectStore(s, { keyPath: "id" });
+                    };
+                    req.onsuccess = e => { this.db = e.target.result; resolve() };
+                    req.onerror = reject;
+                });
+            }
+
+            _getAll(name) {
+                return new Promise((res, rej) => {
+                    const req = this.db.transaction(name, "readonly").objectStore(name).getAll();
+                    req.onsuccess = () => res(req.result || []);
+                    req.onerror = rej;
+                });
+            }
+
+            _put(name, data) {
+                return new Promise((res, rej) => {
+                    const tx = this.db.transaction(name, "readwrite");
+                    tx.objectStore(name).put(data);
+                    tx.oncomplete = res;
+                    tx.onerror = rej;
+                });
+            }
+
+            async syncOnce() {
+                for (const col of Object.keys(this.stores)) {
+                    const local = await this._getAll(col);
+                    const remoteSnap = await this.firestore.collection(col).get();
+                    const remote = remoteSnap.docs.map(d => d.data());
+                    const total = local.length + remote.length;
+                    let i = 0;
+                    for (const l of local) {
+                        const r = remote.find(x => x.id === l.id);
+                        if (!r || l.updatedAt > r.updatedAt) await this.firestore.collection(col).doc(String(l.id)).set(l);
+                        if (this.onProgress) this.onProgress(++i, total);
+                    }
+                    for (const r of remote) {
+                        const l = local.find(x => x.id === r.id);
+                        if (!l || r.updatedAt > l.updatedAt) await this._put(col, r);
+                        if (this.onProgress) this.onProgress(++i, total);
+                    }
+                }
+            }
+        }
+
+        // ---------------------------
+        // Firestore Instance
+        // ---------------------------
+        function getFirestoreInstance() {
+            const cfg = JSON.parse(localStorage.getItem("firestoreConfig") || "{}");
+            if (!cfg.apiKey || !cfg.projectId || !cfg.appId) return null;
+            if (!firebase.apps.length) {
+                firebase.initializeApp({
+                    apiKey: cfg.apiKey,
+                    projectId: cfg.projectId,
+                    appId: cfg.appId
+                });
+            }
+            return firebase.firestore();
+        }
+        const firestoreInstance = getFirestoreInstance();
+
+        // ---------------------------
+        // UI helpers
+        // ---------------------------
+        let syncInstance = null;
+        const defaultStores = { stock: true, panier: true, paiements: true, client: true, produit: true, profil: true, natcash: true };
+        function addHistory(txt) { const ul = document.getElementById("history"); const li = document.createElement("li"); li.textContent = `${new Date().toLocaleTimeString()} — ${txt}`; ul.prepend(li); }
+        function setProgress(p) { document.getElementById("progressBar").style.width = p + "%"; }
+        function setStatus(t) { document.getElementById("status").innerText = t; }
+        async function populateDbSelect() {
+            const select = document.getElementById("dbSelect"); select.innerHTML = '';
+            let dbList = ["edutech-boutique"];
+            try { if (indexedDB.databases) { const dbs = await indexedDB.databases(); dbList = dbs.map(d => d.name).filter(Boolean); } } catch (e) { console.warn("Impossible de lister les DB:", e); }
+            dbList.forEach(name => { const opt = document.createElement("option"); opt.value = name; opt.textContent = name; select.appendChild(opt); });
+        }
+        populateDbSelect();
+
+        // ---------------------------
+        // Firestore Config buttons
+        // ---------------------------
+        window.addEventListener('DOMContentLoaded', () => {
+            const cfg = JSON.parse(localStorage.getItem("firestoreConfig") || '{}');
+            if (cfg.apiKey) document.getElementById("cfg_apiKey").value = cfg.apiKey;
+            if (cfg.projectId) document.getElementById("cfg_projectId").value = cfg.projectId;
+            if (cfg.appId) document.getElementById("cfg_appId").value = cfg.appId;
+        });
+        const btnSave = document.getElementById("btnSaveConfig");
+        const btnReset = document.getElementById("btnResetConfig");
+        const cfgCard = document.getElementById("cfgCard");
+
+        btnSave.onclick = () => {
+            const cfg = { apiKey: document.getElementById("cfg_apiKey").value, projectId: document.getElementById("cfg_projectId").value, appId: document.getElementById("cfg_appId").value };
+            localStorage.setItem("firestoreConfig", JSON.stringify(cfg));
+            document.getElementById("cfgStatus").innerText = "Configuration enregistrée ✔";
+            addHistory("Configuration Firestore enregistrée");
+        };
+        btnReset.onclick = () => {
+            localStorage.removeItem("firestoreConfig");
+            document.getElementById("cfg_apiKey").value = '';
+            document.getElementById("cfg_projectId").value = '';
+            document.getElementById("cfg_appId").value = '';
+            document.getElementById("cfgStatus").innerText = "Configuration réinitialisée ✖";
+            addHistory("Configuration Firestore réinitialisée");
+        };
+
+
+        // ---------------------------
+        // Init Sync
+        // ---------------------------
+        async function initSync() {
+            const dbSelect = document.getElementById("dbSelect");
+            const dbName = dbSelect && dbSelect.value ? dbSelect.value : "edutech-boutique";
+            let existingStores = [];
+            try {
+                if (indexedDB.databases) {
+                    const dbs = await indexedDB.databases();
+                    const dbInfo = dbs.find(d => d.name === dbName);
+                    if (dbInfo) {
+                        const openReq = indexedDB.open(dbName);
+                        openReq.onsuccess = e => { existingStores = Array.from(openReq.result.objectStoreNames); openReq.result.close(); };
+                        await new Promise(res => openReq.onsuccess = res);
+                    }
+                }
+            } catch (e) { console.warn("Impossible de récupérer les objectStores existants:", e); }
+            const storesToCreate = {};
+            for (const s of Object.keys(defaultStores)) if (!existingStores.includes(s)) storesToCreate[s] = true;
+            syncInstance = new FirestoreIndexedDBSync({ dbName, stores: storesToCreate, firestore: firestoreInstance, onProgress: (cur, total) => { const percent = total ? Math.round((cur / total) * 100) : 0; setProgress(percent); setStatus(`Progression : ${percent}%`); } });
+            try {
+                await syncInstance.init();
+                addHistory(`IndexedDB "${dbName}" initialisée avec stores : ${Object.keys(storesToCreate).join(", ")}`);
+            } catch (err) {
+                addHistory(`Erreur init IndexedDB: ${err.message || err}`);
+                console.error("Erreur init IndexedDB:", err);
+                setStatus("Erreur initialisation IndexedDB");
+            }
+        }
+        initSync();
+
+        // ---------------------------
+        // Sync Button
+        // ---------------------------
+        document.getElementById("btnSync").onclick = async () => {
+            if (!syncInstance) { addHistory("SyncInstance non initialisé !"); return; }
+            addHistory("Début de synchronisation");
+            try { await syncInstance.syncOnce(); addHistory("Synchronisation terminée"); }
+            catch (err) { addHistory(`Erreur syncOnce: ${err.message}`); console.error(err); }
+        };
+    </script>
+
+</body>
+
+</html>
